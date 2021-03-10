@@ -1,0 +1,69 @@
+version: '3'
+volumes:
+  todo-app-db: null
+networks:
+  db: null
+  reverse-proxy:
+    name: reverse-proxy
+services:
+  reverse-proxy:
+    image: 'traefik:v2.2'
+    command: '--api.insecure=true --providers.docker'
+    ports:
+      - '80:80'
+      - '443:443'
+      - '8080:8080'
+    volumes:
+      - '/var/run/docker.sock:/var/run/docker.sock'
+    networks:
+      - reverse-proxy
+  db:
+    image: mongo
+    volumes:
+      - 'todo-app-db:/data/db'
+    ports:
+      - '5555:27017'
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=lunarised
+      - MONGO_INITDB_ROOT_PASSWORD=BigMadMan
+    networks:
+      - db
+
+
+
+  backend:
+    image: 'node:13'
+    command: 'npm run dev'
+    ports:
+      - '127.0.0.1:3000:5000'
+    volumes:
+      - '.:/srv/backend:rw'
+    working_dir: /srv/backend
+    depends_on:
+      - db
+    labels:
+      - >-
+        traefik.http.routers.backend.rule=Host(`notesy.localhost`) &&
+        PathPrefix(`/api`)
+      - traefik.http.middlewares.strip-backend.stripprefix.prefixes=/api
+      - traefik.http.routers.backend.middlewares=strip-backend@docker
+      - traefik.docker.network=reverse-proxy
+    networks:
+      - db
+      - reverse-proxy
+
+  # frontend:
+  #   image: 'node:13'
+  #   command: yarn workspace client start
+  #   ports:
+  #     - '127.0.0.1:5000:5000'
+  #   volumes:
+  #     - '.:/srv/frontend:rw'
+  #   working_dir: /srv/frontend
+  #   depends_on:
+  #     - backend
+  #   labels:
+  #     - traefik.http.routers.frontend.rule=Host(`notesy.localhost`)
+  #     - traefik.docker.network=reverse-proxy
+  #   networks:
+  #     - reverse-proxy
